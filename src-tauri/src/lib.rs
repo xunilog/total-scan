@@ -77,6 +77,7 @@ pub fn run() {
         .build(context)
         .expect("error while building tauri application")
         .run(|app_handle, event| match event {
+            #[cfg(target_os = "macos")]
             tauri::RunEvent::Reopen { .. } => tray::show_main_window(app_handle),
             tauri::RunEvent::ExitRequested { .. } => {
                 if let Some(poller) = app_handle.try_state::<Arc<DesktopPoller>>() {

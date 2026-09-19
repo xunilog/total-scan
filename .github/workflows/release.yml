@@ -27,18 +27,10 @@ jobs:
             target: aarch64-apple-darwin
             bundles: app,dmg
             asset: ScanCarburant-macos-arm64
-          - os: macos-14
-            target: x86_64-apple-darwin
-            bundles: app,dmg
-            asset: ScanCarburant-macos-x64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             bundles: msi,nsis
             asset: ScanCarburant-windows-x64
-          - os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            bundles: appimage,deb
-            asset: ScanCarburant-linux-x64
     steps:
       - uses: actions/checkout@v7
         with:
@@ -50,15 +42,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - name: Install Linux dependencies
-        if: matrix.os == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf
       - name: Install frontend dependencies
         run: npm ci
       - name: Build and release
