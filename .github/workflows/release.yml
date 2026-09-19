@@ -32,7 +32,7 @@ jobs:
             output: release/ScanCarburant.msi
             asset: ScanCarburant-windows-x64.msi
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: develop
       - uses: denoland/setup-deno@v2
@@ -42,7 +42,7 @@ jobs:
         run: deno install
       - name: Build
         run: deno desktop -A --target ${{ matrix.target }} --output ${{ matrix.output }} --exclude node_modules .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.asset }}
           path: ${{ matrix.output }}
@@ -53,10 +53,10 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: develop
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
