@@ -39,7 +39,6 @@ import {
   type BrandDirectory,
   brandNames,
   buildBrandIndex,
-  stationMatchesBrands,
 } from "../watcher/brands/directory.ts";
 import { refreshBrandDirectory } from "../watcher/brands/overpass.ts";
 import { normalizeStations } from "../watcher/ingest/normalizer.ts";
@@ -58,6 +57,27 @@ import {
   saveFilters,
   type SortMode,
 } from "./filters/store.ts";
+import {
+  type AppFilters,
+  type AppState,
+  normalizeFilters,
+} from "../shared/app-state.ts";
+import {
+  areaKey,
+  googleMapsDirectionsUrl,
+  latestFuelMaj,
+  matchesFilters,
+  sortStations,
+} from "../shared/station-query.ts";
+import {
+  apiAvailable,
+  fetchBrandDirectory,
+  fetchResults,
+  fetchState,
+  pushFilters,
+  refreshResults,
+  requestNotificationPermission,
+} from "./state/client.ts";
 
 const ODS = {
   baseUrl: "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets",
@@ -99,90 +119,6 @@ function toFuelCode(value: string | null | undefined): FuelCode | null {
   return (FUEL_CODES as readonly string[]).includes(value)
     ? (value as FuelCode)
     : null;
-}
-
-function matchesText(station: StationSnapshot, needle: string): boolean {
-  const haystack = `${station.name} ${station.address} ${station.city}`
-    .toLowerCase();
-  return haystack.includes(needle);
-}
-
-function matchesFilters(
-  station: StationSnapshot,
-  brandIndex: ReadonlyMap<number, ReadonlySet<string>>,
-  brands: readonly string[],
-  needle: string,
-): boolean {
-  if (
-    brands.length > 0 &&
-    !stationMatchesBrands(brandIndex, station.stationId, brands)
-  ) {
-    return false;
-  }
-  if (needle && !matchesText(station, needle)) return false;
-  return true;
-}
-
-function areaKey(origin: GeoPoint, radiusKm: number): string {
-  return `${origin.latitude}|${origin.longitude}|${radiusKm}`;
-}
-
-function googleMapsDirectionsUrl(
-  origin: GeoPoint,
-  destination: { latitude: number; longitude: number },
-): string {
-  const params = new URLSearchParams({
-    api: "1",
-    origin: `${origin.latitude},${origin.longitude}`,
-    destination: `${destination.latitude},${destination.longitude}`,
-    travelmode: "driving",
-  });
-  return `https://www.google.com/maps/dir/?${params}`;
-}
-
-function latestFuelMaj(stations: readonly StationSnapshot[]): string | null {
-  let latestMs: number | null = null;
-  let latestIso: string | null = null;
-  for (const station of stations) {
-    for (const fuel of station.fuels.values()) {
-      if (!fuel.updatedAt) continue;
-      const parsed = Date.parse(fuel.updatedAt);
-      if (Number.isNaN(parsed)) continue;
-      if (latestMs === null || parsed > latestMs) {
-        latestMs = parsed;
-        latestIso = fuel.updatedAt;
-      }
-    }
-  }
-  return latestIso;
-}
-
-function stationFuelPrice(
-  station: StationSnapshot,
-  fuel: FuelCode | null,
-): number | null {
-  if (!fuel) return null;
-  const state = station.fuels.get(fuel);
-  if (!state || state.status !== "available") return null;
-  return state.price;
-}
-
-function sortStations(
-  stations: readonly StationSnapshot[],
-  fuel: FuelCode | null,
-  mode: SortMode,
-): StationSnapshot[] {
-  const byDistance = (a: StationSnapshot, b: StationSnapshot) =>
-    a.distanceKm - b.distanceKm;
-  if (mode !== "price" || !fuel) return [...stations].sort(byDistance);
-  return [...stations].sort((a, b) => {
-    const priceA = stationFuelPrice(a, fuel);
-    const priceB = stationFuelPrice(b, fuel);
-    if (priceA === null && priceB === null) return byDistance(a, b);
-    if (priceA === null) return 1;
-    if (priceB === null) return -1;
-    return priceA - priceB;
-  });
 }
 
 function formatDateTime(value: string | Date | null): string {
@@ -240,19 +176,36 @@ export default function App() {
   const [onlyAvailable, setOnlyAvailable] = useState(
     stored.onlyAvailable ?? false,
   );
+  const [notificationsEnabled, setNotificationsEnabled] = useState(
+    stored.notificationsEnabled ?? false,
+  );
+  const [notificationError, setNotificationError] = useState<string | null>(
+    null,
+  );
+  const [apiReady, setApiReady] = useState(false);
 
   const [results, setResults] = useState<StationSnapshot[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dataUpdatedAt, setDataUpdatedAt] = useState<string | null>(null);
   const [lastSearchAt, setLastSearchAt] = useState<Date | null>(null);
-  const [countdown, setCountdown] = useState(REFRESH_SECONDS);
+  const [pollIntervalMs, setPollIntervalMs] = useState(REFRESH_SECONDS * 1000);
+  const [nowTick, setNowTick] = useState(() => Date.now());
   const [showFilters, setShowFilters] = useState(false);
   const [applied, setApplied] = useState<AppliedFilters | null>({
     longitude: finiteOr(stored.longitude, DEFAULTS.longitude),
     latitude: finiteOr(stored.latitude, DEFAULTS.latitude),
     radiusKm: finiteOr(stored.radiusKm, DEFAULTS.radiusKm),
   });
+
+  // Countdown to the next refresh, derived from the last fetch time reported by
+  // the poller (server-owned schedule) or the last client search.
+  const countdown = lastSearchAt
+    ? Math.max(
+      0,
+      Math.round((lastSearchAt.getTime() + pollIntervalMs - nowTick) / 1000),
+    )
+    : REFRESH_SECONDS;
 
   const [brandDirectory, setBrandDirectory] = useState<BrandDirectory>(() =>
     loadCachedBrands()
@@ -272,6 +225,8 @@ export default function App() {
   const lastQueryRef = useRef<string | null>(null);
   const searchSeqRef = useRef(0);
   const autoRefreshFiredRef = useRef(false);
+  const apiRef = useRef(false);
+  const pushReadyRef = useRef(false);
 
   const brands = useMemo(() => {
     const names = new Set(brandNames(brandDirectory));
@@ -284,11 +239,47 @@ export default function App() {
     setBrandDirectory(next);
   }
 
+  function applyServerState(state: AppState) {
+    const f = state.filters;
+    setLongitude(f.longitude);
+    setLatitude(f.latitude);
+    setRadiusKm(f.radiusKm);
+    setFreeText(f.freeText);
+    setSelectedBrands([...f.selectedBrands]);
+    setSelectedFuel(f.selectedFuel);
+    setOnlyAvailable(f.onlyAvailable);
+    setSortBy(f.sortBy);
+    setNotificationsEnabled(f.notificationsEnabled);
+    updateBrandDirectory(state.brandDirectory);
+  }
+
+  function handleNotificationsToggle(enabled: boolean) {
+    setNotificationsEnabled(enabled);
+    setNotificationError(null);
+    if (!enabled || !apiRef.current) return;
+    void requestNotificationPermission().then(({ granted, available }) => {
+      if (!available) {
+        setNotificationsEnabled(false);
+        setNotificationError(
+          "Notifications système indisponibles dans ce mode.",
+        );
+        return;
+      }
+      if (!granted) {
+        setNotificationsEnabled(false);
+        setNotificationError(
+          "Notifications refusées. Autorisez-les dans les réglages système.",
+        );
+      }
+    });
+  }
+
   async function maybeRefreshBrands(
     origin: GeoPoint,
     radiusKm: number,
     force = false,
   ) {
+    if (apiRef.current) return;
     lastOriginRef.current = origin;
     lastRadiusRef.current = radiusKm;
 
@@ -328,8 +319,40 @@ export default function App() {
     }
   }
 
-  async function runSearch() {
-    setCountdown(REFRESH_SECONDS);
+  async function pullServerResults(silent = false, force = false) {
+    if (!silent) setLoading(true);
+    if (!silent) setError(null);
+    const serverResults = force ? await refreshResults() : await fetchResults();
+    if (!serverResults) {
+      if (!silent) {
+        setError("API locale indisponible.");
+        setLoading(false);
+      }
+      return;
+    }
+    setResults(serverResults.stations);
+    setDataUpdatedAt(serverResults.dataUpdatedAt);
+    if (serverResults.pollIntervalMs > 0) {
+      setPollIntervalMs(serverResults.pollIntervalMs);
+    }
+    const fetched = new Date(serverResults.fetchedAt);
+    if (!Number.isNaN(fetched.getTime()) && fetched.getTime() > 0) {
+      setLastSearchAt(fetched);
+    }
+    setApplied({
+      longitude: Number(longitude),
+      latitude: Number(latitude),
+      radiusKm: Number(radiusKm),
+    });
+    if (serverResults.error) setError(serverResults.error);
+    if (!silent) setLoading(false);
+  }
+
+  async function runSearch(force = false) {
+    if (apiRef.current) {
+      await pullServerResults(false, force);
+      return;
+    }
     const lon = Number(longitude);
     const lat = Number(latitude);
     const radius = Number(radiusKm);
@@ -393,12 +416,27 @@ export default function App() {
       ? radius
       : DEFAULTS.radiusKm;
 
-    if (!hasFetchedBrands(brandDirectoryRef.current)) {
-      void maybeRefreshBrands(origin, validRadius, true);
-    }
-    void runSearch();
+    void (async () => {
+      const available = await apiAvailable();
+      apiRef.current = available;
+      if (available) {
+        const state = await fetchState();
+        if (state) {
+          pushReadyRef.current = true;
+          applyServerState(state);
+        }
+        setApiReady(true);
+        await runSearch();
+        return;
+      }
+      if (!hasFetchedBrands(brandDirectoryRef.current)) {
+        void maybeRefreshBrands(origin, validRadius, true);
+      }
+      void runSearch();
+    })();
 
     const timer = setInterval(() => {
+      if (apiRef.current) return;
       void maybeRefreshBrands(
         lastOriginRef.current,
         lastRadiusRef.current,
@@ -409,6 +447,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (apiRef.current) return;
     const lon = Number(longitude);
     const lat = Number(latitude);
     const radius = Number(radiusKm);
@@ -421,6 +460,54 @@ export default function App() {
     const timer = setTimeout(() => void runSearch(), 600);
     return () => clearTimeout(timer);
   }, [longitude, latitude, radiusKm]);
+
+  useEffect(() => {
+    if (!apiReady || !apiRef.current) return;
+    if (!pushReadyRef.current) {
+      pushReadyRef.current = true;
+      return;
+    }
+    const filters: AppFilters = normalizeFilters({
+      longitude: Number(longitude),
+      latitude: Number(latitude),
+      radiusKm: Number(radiusKm),
+      freeText,
+      selectedBrands,
+      selectedFuel,
+      onlyAvailable,
+      sortBy,
+      notificationsEnabled,
+    });
+    const timer = setTimeout(() => void pushFilters(filters), 500);
+    return () => clearTimeout(timer);
+  }, [
+    apiReady,
+    longitude,
+    latitude,
+    radiusKm,
+    freeText,
+    selectedBrands,
+    selectedFuel,
+    onlyAvailable,
+    sortBy,
+    notificationsEnabled,
+  ]);
+
+  useEffect(() => {
+    if (!apiReady || !apiRef.current) return;
+    const timer = setInterval(() => {
+      void pullServerResults(true);
+      void fetchBrandDirectory().then((directory) => {
+        if (
+          directory &&
+          directory.updatedAt !== brandDirectoryRef.current.updatedAt
+        ) {
+          updateBrandDirectory(directory);
+        }
+      });
+    }, 15_000);
+    return () => clearInterval(timer);
+  }, [apiReady]);
 
   useEffect(() => {
     if (selectedBrands.length === 0) return;
@@ -445,6 +532,7 @@ export default function App() {
       selectedFuel,
       onlyAvailable,
       sortBy,
+      notificationsEnabled,
     };
     saveFilters(state);
   }, [
@@ -456,15 +544,13 @@ export default function App() {
     selectedFuel,
     onlyAvailable,
     sortBy,
+    notificationsEnabled,
   ]);
 
   useEffect(() => {
-    if (loading) return;
-    const timer = setInterval(() => {
-      setCountdown((value) => (value > 0 ? value - 1 : 0));
-    }, 1000);
+    const timer = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [loading]);
+  }, []);
 
   useEffect(() => {
     if (countdown > 0) {
@@ -473,7 +559,7 @@ export default function App() {
     }
     if (autoRefreshFiredRef.current) return;
     autoRefreshFiredRef.current = true;
-    void runSearch();
+    void runSearch(apiRef.current);
   }, [countdown]);
 
   const brandIndex = useMemo(
@@ -534,7 +620,7 @@ export default function App() {
                 <Button
                   variant="light"
                   aria-label="Actualiser"
-                  onClick={() => void runSearch()}
+                  onClick={() => void runSearch(true)}
                   disabled={loading}
                   leftSection={loading ? undefined : <FiRefreshCw />}
                   size="sm"
@@ -633,6 +719,26 @@ export default function App() {
                   {formatDateTime(brandDirectory.updatedAt)}
                 </Text>
               </Group>
+
+              <Switch
+                label="Me notifier quand un carburant redevient disponible"
+                checked={notificationsEnabled}
+                onChange={(event) =>
+                  handleNotificationsToggle(event.currentTarget.checked)}
+                size="xs"
+              />
+
+              {notificationError && (
+                <Text size="xs" c="red">
+                  {notificationError}
+                </Text>
+              )}
+
+              <Text size="xs" c="dimmed">
+                {apiReady
+                  ? "Surveillance en arrière-plan active : les alertes continuent même fenêtre fermée."
+                  : "Surveillance dans l'onglet uniquement (mode navigateur)."}
+              </Text>
 
               {brandError && (
                 <Text size="xs" c="red">

@@ -9,6 +9,7 @@ export interface FilterState {
   readonly selectedFuel: string | null;
   readonly onlyAvailable: boolean;
   readonly sortBy: SortMode;
+  readonly notificationsEnabled?: boolean;
 }
 
 const STORAGE_KEY = "total-scan.filters.v1";
@@ -46,6 +47,9 @@ export function loadFilters(): Partial<FilterState> {
     }
     if (parsed.sortBy === "price" || parsed.sortBy === "distance") {
       result.sortBy = parsed.sortBy;
+    }
+    if (typeof parsed.notificationsEnabled === "boolean") {
+      result.notificationsEnabled = parsed.notificationsEnabled;
     }
     return result;
   } catch {

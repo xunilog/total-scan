@@ -12,3 +12,6 @@ vendor/
 # build output
 dist
 release
+
+# Macos
+.DS_Store

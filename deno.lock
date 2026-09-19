@@ -17,6 +17,7 @@
     "jsr:@std/streams@^1.1.2": "1.1.2",
     "npm:@mantine/core@^9.6.1": "9.6.1_@mantine+hooks@9.6.1_react@19.3.0_react-dom@19.3.0_@types+react@19.3.0",
     "npm:@mantine/hooks@^9.6.1": "9.6.1_react@19.3.0",
+    "npm:@types/deno@^2.7.0": "2.7.0",
     "npm:@types/node@22": "22.20.3",
     "npm:@types/react-dom@^19.3.0": "19.3.0_@types+react@19.3.0",
     "npm:@types/react@^19.3.0": "19.3.0",
@@ -218,6 +219,9 @@
     },
     "@rolldown/pluginutils@1.0.1": {
       "integrity": "sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw=="
+    },
+    "@types/deno@2.7.0": {
+      "integrity": "sha512-Y6fWcV8KpYeO3Lik/RiYnUxtr/LWqoeACciU0CA+dr1U/45tGgaX3HWQQAPCNN53raN4Rr4Fht4y6qsUH57fDA=="
     },
     "@types/node@22.20.3": {
       "integrity": "sha512-DZmzkmwHzXrLPAXPyKNDzlIwMMUZCVacoD25ywdy5YTKGbOx/2ld+Q38Im2zJ0vBuZP5Prd3VZutKZyXwkOS8A==",
@@ -592,6 +596,7 @@
       "jsr:@std/http@^1.1.3",
       "npm:@mantine/core@^9.6.1",
       "npm:@mantine/hooks@^9.6.1",
+      "npm:@types/deno@^2.7.0",
       "npm:@types/node@22",
       "npm:@types/react-dom@^19.3.0",
       "npm:@types/react@^19.3.0",

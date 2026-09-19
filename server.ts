@@ -9,13 +9,43 @@
 // desktop setup is a no-op.
 
 import { serveDir } from "@std/http/file-server";
+import { handleApi } from "./api.ts";
 import { setupDesktop } from "./desktop.ts";
+import { createDesktopNotifier } from "./notify.ts";
+import { DesktopPoller } from "./poller.ts";
+import { loadState } from "./state-store.ts";
+import { createConsoleLogger } from "./watcher/util/log.ts";
 
-setupDesktop();
+const logger = createConsoleLogger();
+const win = setupDesktop();
+
+// The tray/Deno process owns polling so notifications keep firing with the
+// window closed. `Notification` only exists under `deno desktop`; the notifier
+// no-ops elsewhere.
+const notifier = createDesktopNotifier({
+  focus: () => {
+    win?.show();
+    win?.focus();
+  },
+});
+const poller = new DesktopPoller({
+  state: await loadState(),
+  notifier,
+  logger,
+});
+poller.start();
+
+logger.info("desktop runtime ready", {
+  window: win !== null,
+  notifications: notifier.available(),
+});
 
 const fsRoot = `${import.meta.dirname}/dist`;
 
 Deno.serve(async (req) => {
+  const api = await handleApi(req, poller);
+  if (api) return api;
+
   const res = await serveDir(req, { fsRoot, quiet: true });
 
   // SPA fallback: route unmatched HTML navigations back to index.html so

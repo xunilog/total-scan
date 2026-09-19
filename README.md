@@ -38,6 +38,11 @@ The extension of `desktop.output.<platform>` in `deno.json` selects the format
 (`.app` / `.dmg` on macOS, `.exe` / `.msi` on Windows, `.AppImage` / `.deb` /
 `.rpm` on Linux). Cross-compile with `--target` / `--all-targets`.
 
+Builds pass `--compress` to produce a self-extracting bundle: the embedded
+runtime unpacks to a per-user data directory on first launch instead of next to
+the executable. This is required for per-machine installs under `%ProgramFiles%`
+(the Windows `.msi`), where a standard user cannot write beside the binary.
+
 ## Layout
 
 | Path                 | Purpose                                                    |

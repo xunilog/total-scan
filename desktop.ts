@@ -31,13 +31,15 @@ interface DesktopMenuItem {
 
 type DesktopMenu = Array<DesktopMenuItem | "separator">;
 
-interface DesktopWindow {
+export interface DesktopWindow {
   setApplicationMenu(menu: DesktopMenu): void;
   addEventListener(
     type: "menuclick",
     listener: (e: CustomEvent<{ id: string }>) => void,
   ): void;
+  addEventListener(type: "close", listener: (e: Event) => void): void;
   show(): void;
+  hide(): void;
   focus(): void;
   reload(): void;
   openDevtools(): void;
@@ -55,23 +57,39 @@ interface DesktopTray {
   ): void;
 }
 
+interface DesktopDock {
+  addEventListener(
+    type: "reopen",
+    listener: (e: CustomEvent<{ hasVisibleWindows: boolean }>) => void,
+  ): void;
+}
+
 interface DesktopApi {
   BrowserWindow?: new (
     options: { title?: string; width?: number; height?: number },
   ) => DesktopWindow;
   Tray?: new () => DesktopTray;
+  dock?: DesktopDock;
 }
 
 function pngBytes(base64: string): Uint8Array {
   return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 }
 
-export function setupDesktop(): void {
-  const { BrowserWindow, Tray } = Deno as unknown as DesktopApi;
+export function setupDesktop(): DesktopWindow | null {
+  const { BrowserWindow, Tray, dock } = Deno as unknown as DesktopApi;
 
   if (typeof BrowserWindow !== "function" || typeof Tray !== "function") {
-    return;
+    return null;
   }
+
+  // Set before terminating so the window `close` handler below does not treat
+  // an intentional quit as a "hide the window" request.
+  let quitting = false;
+  const quit = () => {
+    quitting = true;
+    Deno.exit(0);
+  };
 
   // The first BrowserWindow constructed adopts the implicit startup window.
   const win = new BrowserWindow({
@@ -87,7 +105,14 @@ export function setupDesktop(): void {
         items: [
           { item: { label: "Reload", id: "reload", enabled: true } },
           "separator",
-          { role: { role: "quit" } },
+          {
+            item: {
+              label: "Quit Scan Carburant",
+              id: "quit",
+              accelerator: "CmdOrCtrl+Q",
+              enabled: true,
+            },
+          },
         ],
       },
     },
@@ -151,6 +176,9 @@ export function setupDesktop(): void {
       case "devtools":
         win.openDevtools();
         break;
+      case "quit":
+        quit();
+        break;
     }
   });
 
@@ -158,6 +186,15 @@ export function setupDesktop(): void {
   tray.setIcon(pngBytes(TRAY_ICON_LIGHT));
   tray.setIconDark(pngBytes(TRAY_ICON_DARK));
   tray.setTooltip("Scan Carburant");
+
+  // Tray-only: closing the window hides it so the process (and the Deno poll
+  // loop) keeps running. Quit via the tray or the app menu.
+  win.addEventListener("close", (e) => {
+    if (quitting) return;
+    e.preventDefault();
+    win.hide();
+  });
+
   tray.setMenu([
     { item: { label: "Open Window", id: "open", enabled: true } },
     "separator",
@@ -176,6 +213,10 @@ export function setupDesktop(): void {
     win.focus();
   };
 
+  // With no visible window, macOS swallows the default dock reopen behavior;
+  // restore the window when the dock icon is clicked.
+  dock?.addEventListener("reopen", () => showWindow());
+
   tray.addEventListener("click", showWindow);
   tray.addEventListener("menuclick", (e) => {
     switch (e.detail.id) {
@@ -183,8 +224,10 @@ export function setupDesktop(): void {
         showWindow();
         break;
       case "quit":
-        Deno.exit(0);
+        quit();
         break;
     }
   });
+
+  return win;
 }
