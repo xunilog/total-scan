@@ -41,7 +41,7 @@ jobs:
       - name: Install dependencies
         run: deno install
       - name: Build
-        run: deno desktop -A --target ${{ matrix.target }} --output ${{ matrix.output }} .
+        run: deno desktop -A --target ${{ matrix.target }} --output ${{ matrix.output }} --exclude node_modules .
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}

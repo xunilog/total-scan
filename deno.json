@@ -5,8 +5,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "desktop": "rm -rf release && deno desktop -A .",
-    "desktop:dev": "rm -rf release && deno desktop -A --hmr .",
+    "desktop": "rm -rf release && deno desktop -A --exclude node_modules .",
+    "desktop:dev": "rm -rf release && deno desktop -A --hmr --exclude node_modules .",
     "watcher": "deno run -A watcher/main.ts",
     "watcher:test": "deno test watcher/",
     "watcher:check": "deno fmt --check watcher/ && deno lint watcher/ && deno check watcher/"
