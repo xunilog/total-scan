@@ -16,8 +16,46 @@ permissions:
   contents: write
 
 jobs:
+  version:
+    name: Bump version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop
+      - name: Set version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          node - <<'EOF'
+          const fs = require("fs");
+          const v = process.env.RELEASE_VERSION;
+          for (const f of ["package.json", "src-tauri/tauri.conf.json"]) {
+            const j = JSON.parse(fs.readFileSync(f, "utf8"));
+            j.version = v;
+            fs.writeFileSync(f, JSON.stringify(j, null, 2) + "\n");
+          }
+          const cargoPath = "src-tauri/Cargo.toml";
+          const cargo = fs
+            .readFileSync(cargoPath, "utf8")
+            .replace(/^version = ".*"$/m, `version = "${v}"`);
+          fs.writeFileSync(cargoPath, cargo);
+          EOF
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
+          if git diff --staged --quiet; then
+            echo "No version changes to commit"
+          else
+            git commit -m "chore: release v${{ inputs.version }}"
+            git push
+          fi
+
   build:
     name: Build ${{ matrix.asset }}
+    needs: version
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -52,6 +90,7 @@ jobs:
           tagName: v${{ inputs.version }}
           releaseName: v${{ inputs.version }}
           releaseBody: ${{ inputs.description }}
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
+          makeLatest: true
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
