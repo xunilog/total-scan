@@ -9,10 +9,7 @@ interface ErrorBoundaryState {
   readonly error: Error | null;
 }
 
-export class ErrorBoundary extends Component<
-  ErrorBoundaryProps,
-  ErrorBoundaryState
-> {
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   override state: ErrorBoundaryState = { error: null };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
@@ -30,8 +27,7 @@ export class ErrorBoundary extends Component<
       <Stack p="xl" gap="md">
         <Title order={2}>Une erreur est survenue</Title>
         <Text c="dimmed">
-          L'application a rencontré une erreur inattendue. Rechargez la fenêtre
-          ou réessayez.
+          L'application a rencontré une erreur inattendue. Rechargez la fenêtre ou réessayez.
         </Text>
         <Alert color="red" title={error.name}>
           <Code block>{error.message}</Code>

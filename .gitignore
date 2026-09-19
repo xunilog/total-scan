@@ -13,5 +13,8 @@ vendor/
 dist
 release
 
+# Rust / Tauri
+src-tauri/target/
+
 # Macos
 .DS_Store

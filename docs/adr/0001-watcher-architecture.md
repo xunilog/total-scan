@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-09-18
 - **Deciders:** Yann
-- **Related:** none yet
+- **Related:** [ADR 0002](./0002-tauri-migration.md) (desktop scaffold: Deno → Tauri)
 
 ## Context
 
@@ -195,5 +195,6 @@ Station name, distance, fuel, price, and the station-declared `maj` timestamp
   a single Deno codebase wrapped as a service.
 - **Alert transport:** ntfy vs Telegram (both free and easy).
 - **Fuel codes to watch by default** and default radius.
-- Whether the existing Deno desktop scaffold becomes the dashboard or is
-  discarded/renamed.
+- **Desktop scaffold:** resolved by ADR 0002 — the Deno desktop scaffold is
+  replaced by a Tauri v2 app (TypeScript UI + Rust core) that hosts the watcher
+  in-process; the standalone Deno headless watcher is retired.

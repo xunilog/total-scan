@@ -25,50 +25,50 @@ jobs:
         include:
           - os: macos-14
             target: aarch64-apple-darwin
-            output: release/ScanCarburant.dmg
-            asset: ScanCarburant-macos-arm64.dmg
+            bundles: app,dmg
+            asset: ScanCarburant-macos-arm64
+          - os: macos-14
+            target: x86_64-apple-darwin
+            bundles: app,dmg
+            asset: ScanCarburant-macos-x64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            output: release/ScanCarburant.msi
-            asset: ScanCarburant-windows-x64.msi
+            bundles: msi,nsis
+            asset: ScanCarburant-windows-x64
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: appimage,deb
+            asset: ScanCarburant-linux-x64
     steps:
       - uses: actions/checkout@v7
         with:
           ref: develop
-      - uses: denoland/setup-deno@v2
+      - uses: actions/setup-node@v4
         with:
-          deno-version: v2.x
-      - name: Install dependencies
-        run: deno install
-      - name: Build
-        run: deno desktop -A --compress --target ${{ matrix.target }} --output ${{ matrix.output }} --exclude node_modules .
-      - uses: actions/upload-artifact@v7
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          name: ${{ matrix.asset }}
-          path: ${{ matrix.output }}
-          if-no-files-found: error
-
-  release:
-    name: Create tag and release
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: develop
-      - uses: actions/download-artifact@v8
-        with:
-          path: artifacts
-          merge-multiple: true
-      - name: Create tag and release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ inputs.version }}
-          DESCRIPTION: ${{ inputs.description }}
+          targets: ${{ matrix.target }}
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-22.04'
         run: |
-          tag="v${VERSION#v}"
-          gh release create "$tag" \
-            --title "$tag" \
-            --notes "$DESCRIPTION" \
-            --target develop \
-            artifacts/*
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Build and release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v${{ inputs.version }}
+          releaseName: v${{ inputs.version }}
+          releaseBody: ${{ inputs.description }}
+          releaseDraft: true
+          prerelease: false
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}

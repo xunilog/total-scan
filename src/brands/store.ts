@@ -1,11 +1,7 @@
-import {
-  type BrandDirectory,
-  EMPTY_BRAND_DIRECTORY,
-} from "../../watcher/brands/directory.ts";
+import type { BrandDirectory } from "../types.ts";
+import { EMPTY_BRAND_DIRECTORY } from "../types.ts";
 
 const STORAGE_KEY = "total-scan.brand-directory.v1";
-const AREA_KEY = "total-scan.brand-directory.area.v1";
-export const BRAND_TTL_MS = 60 * 60 * 1000;
 
 export function loadCachedBrands(): BrandDirectory {
   try {
@@ -29,36 +25,6 @@ export function loadCachedBrands(): BrandDirectory {
 export function saveCachedBrands(directory: BrandDirectory): void {
   try {
     globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(directory));
-  } catch {
-    return;
-  }
-}
-
-export function isBrandCacheStale(
-  directory: BrandDirectory,
-  nowMs: number,
-): boolean {
-  const updated = Date.parse(directory.updatedAt);
-  if (Number.isNaN(updated)) return true;
-  return nowMs - updated >= BRAND_TTL_MS;
-}
-
-export function hasFetchedBrands(directory: BrandDirectory): boolean {
-  const updated = Date.parse(directory.updatedAt);
-  return Number.isFinite(updated) && updated > 0;
-}
-
-export function loadBrandArea(): string | null {
-  try {
-    return globalThis.localStorage?.getItem(AREA_KEY) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-export function saveBrandArea(area: string): void {
-  try {
-    globalThis.localStorage?.setItem(AREA_KEY, area);
   } catch {
     return;
   }

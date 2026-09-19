@@ -1,4 +1,4 @@
-export type SortMode = "price" | "distance";
+import type { SortMode } from "../types.ts";
 
 export interface FilterState {
   readonly longitude: number | string;
@@ -37,9 +37,7 @@ export function loadFilters(): Partial<FilterState> {
         (brand): brand is string => typeof brand === "string",
       );
     }
-    if (
-      parsed.selectedFuel === null || typeof parsed.selectedFuel === "string"
-    ) {
+    if (parsed.selectedFuel === null || typeof parsed.selectedFuel === "string") {
       result.selectedFuel = parsed.selectedFuel as string | null;
     }
     if (typeof parsed.onlyAvailable === "boolean") {
