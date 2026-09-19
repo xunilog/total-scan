@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActionIcon,
   Alert,
+  Anchor,
   Badge,
   Button,
   Card,
@@ -19,7 +20,12 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { FiChevronDown, FiChevronUp, FiRefreshCw } from "react-icons/fi";
+import {
+  FiChevronDown,
+  FiChevronUp,
+  FiNavigation,
+  FiRefreshCw,
+} from "react-icons/fi";
 import {
   FUEL_CODES,
   type FuelCode,
@@ -119,6 +125,19 @@ function matchesFilters(
 
 function areaKey(origin: GeoPoint, radiusKm: number): string {
   return `${origin.latitude}|${origin.longitude}|${radiusKm}`;
+}
+
+function googleMapsDirectionsUrl(
+  origin: GeoPoint,
+  destination: { latitude: number; longitude: number },
+): string {
+  const params = new URLSearchParams({
+    api: "1",
+    origin: `${origin.latitude},${origin.longitude}`,
+    destination: `${destination.latitude},${destination.longitude}`,
+    travelmode: "driving",
+  });
+  return `https://www.google.com/maps/dir/?${params}`;
 }
 
 function latestFuelMaj(stations: readonly StationSnapshot[]): string | null {
@@ -693,7 +712,21 @@ export default function App() {
                     {station.distanceKm.toFixed(1)} km
                   </Badge>
                   <div>
-                    <Text fw={600}>{station.name}</Text>
+                    <Group gap="xs" wrap="nowrap" align="center">
+                      <Text fw={600}>{station.name}</Text>
+                      {applied && (
+                        <Anchor
+                          href={googleMapsDirectionsUrl(applied, station)}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={`Itinéraire vers ${station.name}`}
+                          title="Itinéraire Google Maps"
+                          c="blue"
+                        >
+                          <FiNavigation size={16} />
+                        </Anchor>
+                      )}
+                    </Group>
                     <Text size="sm" c="dimmed">
                       #{station.stationId} · {station.city}
                     </Text>
