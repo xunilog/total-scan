@@ -1,0 +1,14 @@
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# npm + other dependencies
+node_modules/
+vendor/
+
+# build output
+dist
+release
